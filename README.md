@@ -36,6 +36,7 @@ four notebooks that can be used for teaching.
 ├── scripts/
 │   ├── download_data.py       fetch the dataset from Zenodo and verify checksums
 │   ├── run_experiments.py     command-line training of any model × feature vector
+│   ├── sensitivity_ann_lr.py  ANN learning-rate sensitivity (not reported in the paper)
 │   └── build_notebooks.py     notebooks are generated from this file (easy to diff)
 ├── tests/test_pipeline.py     unit tests (no dataset needed)
 ├── results/                   summary.csv, k-NN grid, cached run metrics
@@ -87,7 +88,53 @@ Final hyperparameters (all in `lora_loc/config.py`):
 
 ## Reproduction report
 
-RESULTS_PLACEHOLDER
+All numbers are on the **test split** (19,565 messages) from one run with seed 42, on a 4-core
+CPU (TensorFlow 2.21, XGBoost 3.2, LightGBM 4.7, scikit-learn 1.9). They were produced by
+`python scripts/run_experiments.py --fv FV1 FV2` (full table in `results/summary.csv`).
+
+**What matches exactly:** dataset checksum (Zenodo v1.2), 44 active gateways, the RSSI range
+[−127, −60] dBm, and the split sizes 91,300 / 19,564 / 19,565.
+
+### Mean localization error (m): reproduction vs. paper (Table 10)
+
+| Model | FV1 ours | FV1 paper | Δ | FV2 ours | FV2 paper | Δ |
+|---|---:|---:|---:|---:|---:|---:|
+| k-NN | 336.51 | 338.56 | −2.05 | 331.74 | 326.26 | +5.48 |
+| CNN | 354.01 | 343.88 | +10.13 | 343.34 | 341.39 | +1.95 |
+| SVR | 334.35 | 331.92 | +2.43 | **376.22** | 321.93 | **+54.29** |
+| ANN | 354.43 | 332.74 | **+21.69** | 347.11 | 329.84 | +17.27 |
+| XGBoost | 329.33 | 327.66 | +1.67 | 320.43 | 318.95 | +1.48 |
+| LightGBM | 326.75 | 325.43 | +1.32 | **317.19** | 316.59 | +0.60 |
+| Hybrid | **326.72** | 323.38 | +3.34 | 321.53 | 314.21 | +7.32 |
+
+Median / SD on FV1 (ours; paper in brackets where reported): k-NN 207.0 / 414.8 (209.15 / 417.30),
+CNN 244.9 / 386.3 (234.16 / 380.84), ANN 248.3 / 392.3 (218 / 384).
+
+The **k-NN hyperparameter grid (Table 1)** also reproduces: Manhattan, k = 11 → 336.51 m
+(paper 338.56 m); Euclidean k = 11 → 335.96 m (340.75 m); Chebyshev k = 11 → 350.02 m (350.40 m).
+The one exception is cosine at small k, which is 19 m better than the paper at k = 3.
+See `results/knn_grid_table1.csv`.
+
+### Reading these results
+
+- **Reproduced well (within ≈2 %):** k-NN, XGBoost and LightGBM on both FV1 and FV2, plus SVR
+  and the Hybrid on FV1. Our trends agree with the paper's: the tree ensembles and the Hybrid
+  are best, and adding SF (FV2) helps every model except SVR.
+- **Not reproduced:**
+  - *ANN* is 17–22 m worse than reported. The paper does not give its learning rate. We use the
+    authors' notebook value (1e-4), and higher rates are worse (1e-4: 354.4 m, 3e-4: 376.3 m,
+    1e-3: 449.3 m on FV1; `results/sensitivity_ann_lr.csv`). The gap remains unexplained.
+  - *SVR on FV2* is 54 m worse. With our setup, adding SF makes SVR *worse* than on FV1. The paper
+    says SVR received extra feature selection and random search (Sec. V-D) that it does not specify.
+  - *CNN on FV1* is 10 m worse (neural-network variance plus unreported batch size).
+- **Model differences are small.** On FV1 the top three models (Hybrid, LightGBM, XGBoost) are within 3 m of each other. With
+  one seed, we cannot rank them reliably.
+- **Heavy tail.** Median errors are about 200 m, but the 90th percentile is about 800 m and the
+  maximum about 5 km, set by messages heard by a single gateway (31 % of all messages).
+- **Inference time.** The per-sample ranking matches Fig. 5: trees and k-NN take about 2–3 ms, and
+  the Keras models about 70 ms when called one sample at a time. Batched prediction is over 1000×
+  faster for the neural networks, so Fig. 5-style per-sample timings mostly measure framework
+  overhead, not model cost.
 
 ## Deviations, assumptions and caveats
 

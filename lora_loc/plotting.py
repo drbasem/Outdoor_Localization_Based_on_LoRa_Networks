@@ -64,7 +64,10 @@ def compare_bars(ours: pd.Series, paper: pd.Series, ax=None, title="Mean error: 
     ax.set_xticks(x, names)
     ax.set(ylabel="Mean error (m)", title=title)
     ax.grid(axis="x", visible=False)
-    ax.legend(loc="upper right")
+    from matplotlib.patches import Patch
+    ax.legend(handles=[Patch(color="#c3c2b7", label="Paper"),
+                       Patch(color=MUTED, label="This reproduction (model colour)")],
+              loc="upper right")
     return ax
 
 

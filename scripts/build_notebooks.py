@@ -405,8 +405,9 @@ trained with Adam (lr = 1e-3) for 100 epochs, batch 32 (Table 2).
 
 *A critical remark for students:* a convolution assumes that neighbouring inputs are related.
 Here the neighbours are `BS 4`, `BS 5`, …, which are dataset column indices, **not** spatial
-neighbours. The CNN therefore cannot exploit real locality, and it does not beat the plain ANN or
-the tree models. That is consistent with the paper's own numbers.
+neighbours. The CNN therefore cannot exploit real locality. In the paper it is the weakest model
+on FV1 (343.88 m, worse than the plain ANN and all tree models), and in our reproduction it does
+not beat the tree models either.
 """),
     code('report("CNN")'),
     md(r"""
@@ -526,8 +527,13 @@ ax.set_title(f"{best} on {best_fv}: mean error per 150 m cell"); plt.show()
 print({k: f"{v:.1%}" for k, v in share.items()})
 print("paper (Hybrid, best FV): 21.7% of cells < 250 m, 33% < 300 m, 42.6% < 350 m")"""),
     md("""
-Large errors cluster at the edges of the covered area and along sparsely driven roads, where
-few training fingerprints exist and messages are often heard by a single gateway.
+Large errors cluster on the periphery of the covered area, most visibly in the sparsely
+sampled western part. There, few training fingerprints exist and messages are often heard by a
+single gateway. The dense city centre has the lowest errors.
+
+The paper's cell statistics (21.7 % / 33 % / 42.6 % of cells below 250 / 300 / 350 m) are for
+the Hybrid on its best FV (FV4, mean 244.5 m), so they are not directly comparable with an
+FV1/FV2 map.
 
 ## 4.4 Inference time (Fig. 5)
 Per-sample prediction time, measured by predicting one sample at a time on 200 random test
@@ -561,9 +567,14 @@ from our run and a full list of deviations. The key points for students:
 
 1. **The protocol reproduces exactly.** Dataset checksum, 44 active gateways, −200 → −128 dBm,
    and split sizes (91,300 / 19,564 / 19,565) all match the paper.
-2. **Mean errors on FV1/FV2 are close for the non-neural models,** with small differences. Remaining
-   gaps come from unreported details (SVR γ, ANN learning rate, hybrid kernel size / T), random
-   initialisation of the neural networks, and library versions.
+2. **The tree models and k-NN reproduce within about 0.5–2 % on FV1 and FV2** (XGBoost, LightGBM,
+   k-NN; the full k-NN grid of Table 1 too). SVR and the Hybrid reproduce within about 1 % on FV1.
+   The larger gaps are the ANN (+22 m on FV1; the learning rate is not reported, and 1e-4 was the
+   best of the rates we tried), the CNN (+10 m on FV1), and **SVR on FV2 (+54 m)**. For SVR the paper
+   says it used additional feature selection and random search beyond the grid, without giving
+   details, so the FV2 configuration cannot be reproduced from the text. Other sources of gaps are
+   unreported details (SVR γ, hybrid kernel size / T), random initialisation of the neural networks,
+   and library versions.
 3. **Differences between the tree models are within a few metres,** which is about the size of the
    run-to-run variation of the neural models. Rankings between close models should not be
    over-interpreted without repeated runs (different seeds) and confidence intervals.
