@@ -1,0 +1,11 @@
+# dataset files (download with scripts/download_data.py)
+data/*.csv
+data/*.json
+data/*.txt
+# cached model outputs (predictions are large; the summary CSV and figures are kept)
+results/runs*/**/*.npz
+results/*.log
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/

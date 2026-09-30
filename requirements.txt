@@ -1,0 +1,10 @@
+# Tested with Python 3.11 and the versions below (CPU only).
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+xgboost>=2.0        # tested 3.2.0
+lightgbm>=4.0       # tested 4.7.0
+tensorflow>=2.16    # tested 2.21 (tensorflow-cpu is enough)
+matplotlib>=3.8
+jupyter
+pytest
