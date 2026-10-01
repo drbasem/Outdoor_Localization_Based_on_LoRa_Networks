@@ -13,6 +13,20 @@ import nbformat as nbf
 
 NB_DIR = Path(__file__).resolve().parents[1] / "notebooks"
 
+REPO = "https://github.com/drbasem/Outdoor_Localization_Based_on_LoRa_Networks"
+BRANCH = "claude/keen-hamilton-7kcqml"
+
+COLAB = f"""\
+# ▶ Run this cell first. On your own computer it does nothing; on Google Colab it downloads the
+#   code and the dataset (about 1-2 minutes the first time).
+import os, sys, subprocess
+if "google.colab" in sys.modules:
+    if not os.path.exists("/content/repo"):
+        subprocess.run(["git", "clone", "--depth", "1", "-b", "{BRANCH}", "{REPO}", "/content/repo"], check=True)
+    os.chdir("/content/repo/notebooks")
+    subprocess.run([sys.executable, "../scripts/download_data.py", "--json"], check=True)
+print("working folder:", os.getcwd())"""
+
 SETUP = """\
 import sys, warnings
 from pathlib import Path
@@ -325,7 +339,7 @@ d = experiment.prepare_fv(FV)
 results = {}
 
 def report(name):
-    r = experiment.run(name, FV, prepared=d, force=FORCE, verbose=False)
+    r = experiment.run(name, FV, prepared=d, force=FORCE, verbose=False, metrics_only=not FORCE)
     results[name] = r
     m = r["metrics"]
     ref = paper.MEAN_ERROR_M.loc[name, FV]
@@ -562,7 +576,7 @@ if config.JSON_FILE.exists():
     for fv in ALL_FV:
         d = experiment.prepare_fv(fv, source="json")
         for name in ["k-NN", "XGBoost", "LightGBM", "ANN"]:
-            experiment.run(name, fv, prepared=d, runs_dir=json_dir, verbose=False)
+            experiment.run(name, fv, prepared=d, runs_dir=json_dir, verbose=False, metrics_only=True)
 rj = experiment.collect(json_dir)
 if rj.empty:
     print("No JSON results: put lorawan_antwerp_2019_dataset.json.txt in data/ and re-run.")
@@ -687,7 +701,9 @@ from our run and a full list of deviations. The key points for students:
 
 def write(name, cells):
     nb = nbf.v4.new_notebook()
-    nb.cells = cells
+    badge = md(f"[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)]"
+               f"(https://colab.research.google.com/github/drbasem/Outdoor_Localization_Based_on_LoRa_Networks/blob/{BRANCH}/notebooks/{name})")
+    nb.cells = [cells[0], badge, code(COLAB)] + cells[1:]
     nb.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3", "language": "python"}
     nb.metadata["language_info"] = {"name": "python"}
     path = NB_DIR / name

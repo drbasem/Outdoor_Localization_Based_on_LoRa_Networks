@@ -54,14 +54,23 @@ def prepare_fv(fv: str, df: pd.DataFrame | None = None, rssi_cols: list[str] | N
 
 def run(model_name: str, fv: str = "FV1", prepared=None, force: bool = False,
         runs_dir: Path = RUNS_DIR, model_kwargs: dict | None = None, time_n_single: int = 200,
-        verbose: bool = True) -> dict:
+        verbose: bool = True, metrics_only: bool = False) -> dict:
     """Train ``model_name`` on ``fv``, evaluate it on the test split and cache the result.
 
     Returns a dict with ``metrics`` (see :mod:`lora_loc.evaluation`), per-sample test
     ``errors_m``, the predicted and true coordinates in degrees, and ``train_s``.
+
+    With ``metrics_only=True`` the cached ``.json`` alone is enough. This lets a fresh clone
+    show every result without the large per-sample ``.npz`` files, which are only stored
+    in git for the CSV runs.
     """
     out_dir = Path(runs_dir) / fv
     stem = out_dir / _slug(model_name)
+    if not force and metrics_only and stem.with_suffix(".json").exists():
+        meta = json.loads(stem.with_suffix(".json").read_text())
+        if verbose:
+            print(f"[cache] {fv} {model_name}: mean {meta['metrics']['mean_m']:.2f} m")
+        return meta
     if not force and stem.with_suffix(".json").exists() and stem.with_suffix(".npz").exists():
         arr = np.load(stem.with_suffix(".npz"))
         meta = json.loads(stem.with_suffix(".json").read_text())

@@ -4,6 +4,8 @@ data/*.json
 data/*.txt
 # cached model outputs (predictions are large; the summary CSV and figures are kept)
 results/**/*.npz
+# ...except the CSV runs, which notebooks 3-4 need for CDFs and error maps (~7 MB)
+!results/runs/*/*.npz
 results/*.log
 __pycache__/
 *.pyc
