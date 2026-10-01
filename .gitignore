@@ -3,7 +3,7 @@ data/*.csv
 data/*.json
 data/*.txt
 # cached model outputs (predictions are large; the summary CSV and figures are kept)
-results/runs*/**/*.npz
+results/**/*.npz
 results/*.log
 __pycache__/
 *.pyc
