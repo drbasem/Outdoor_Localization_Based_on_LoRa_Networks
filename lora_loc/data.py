@@ -115,6 +115,9 @@ def load_json(path: Path | str = config.JSON_FILE,
         Per-message scalars.
     ``Latitude``, ``Longitude``
         Ground truth.
+    ``DevEUI``, ``RxTime``
+        Device identifier and earliest gateway reception time. They are not model inputs;
+        they are used only for the chronological and device-held-out split checks.
 
     Notes
     -----
@@ -137,6 +140,10 @@ def load_json(path: Path | str = config.JSON_FILE,
             "HDOP": msg.get("hdop"),
             "Latitude": msg.get("latitude"),
             "Longitude": msg.get("longitude"),
+            "DevEUI": msg.get("dev_eui"),
+            # earliest reception time over all gateways (ISO-8601 string)
+            "RxTime": min((gw.get("rx_time", {}).get("time", "") for gw in msg.get("gateways", [])),
+                          default=None),
         }
         for gw in msg.get("gateways", []):
             gid = str(gw["id"])
@@ -152,7 +159,7 @@ def load_json(path: Path | str = config.JSON_FILE,
     for prefix in ("RSSI", "SNR", "ESP"):
         cols = [f"{prefix}_{g}" for g in ordered]
         blocks.append(df.reindex(columns=cols).astype(float).fillna(no_signal))
-    scalars = df[["SF", "Channel", "Counter", "Airtime", "HDOP"] + TARGET_COLUMNS]
+    scalars = df[["SF", "Channel", "Counter", "Airtime", "HDOP"] + TARGET_COLUMNS + ["DevEUI", "RxTime"]]
     return pd.concat(blocks + [scalars.reset_index(drop=True)], axis=1)
 
 

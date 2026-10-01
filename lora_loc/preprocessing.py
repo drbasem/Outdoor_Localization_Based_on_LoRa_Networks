@@ -190,12 +190,51 @@ class PreparedData:
     idx_test: np.ndarray
 
 
+def chronological_split(times: pd.Series, fractions=(0.70, 0.15, 0.15)):
+    """Train on the earliest 70 % of messages, validate on the next 15 %, test on the last 15 %.
+
+    This removes the "temporal neighbour" shortcut of the random split: no test message has
+    a training message from the same vehicle sent seconds earlier.
+    """
+    t = pd.to_datetime(times, utc=True, format="ISO8601")
+    order = np.argsort(t.to_numpy(), kind="stable")
+    n = len(order)
+    a, b = int(round(fractions[0] * n)), int(round((fractions[0] + fractions[1]) * n))
+    return order[:a], order[a:b], order[b:]
+
+
+def device_split(devices: pd.Series, test_fraction: float = 0.15, seed: int = config.SEED):
+    """Hold out whole devices: test devices are never seen during training.
+
+    Devices are shuffled and added to the test set until it holds ~``test_fraction`` of the
+    messages; the remaining messages are split 85/15 into train/validation at random.
+    """
+    rng = np.random.default_rng(seed)
+    dev = devices.to_numpy()
+    uniq = rng.permutation(pd.unique(dev))
+    counts = pd.Series(dev).value_counts()
+    test_devs, total = [], 0
+    for u in uniq:
+        if total >= test_fraction * len(dev):
+            break
+        test_devs.append(u)
+        total += counts[u]
+    is_test = np.isin(dev, test_devs)
+    rest = np.where(~is_test)[0]
+    tr, va = train_test_split(rest, test_size=0.15 / 0.85, random_state=seed)
+    return tr, va, np.where(is_test)[0]
+
+
 def prepare(df: pd.DataFrame, rssi_cols: list[str], other_cols: list[str] | None = None,
-            seed: int = config.SEED) -> PreparedData:
-    """Split ``df``, fit the pipeline on the training rows and transform all three splits."""
+            seed: int = config.SEED, split=None) -> PreparedData:
+    """Split ``df``, fit the pipeline on the training rows and transform all three splits.
+
+    ``split`` may be a precomputed ``(train_idx, val_idx, test_idx)`` tuple, e.g. from
+    :func:`chronological_split`; by default the paper's random 70/15/15 split is used.
+    """
     other_cols = list(other_cols or [])
     y = df[["Latitude", "Longitude"]].to_numpy(dtype=float)
-    tr, va, te = split_indices(len(df), seed)
+    tr, va, te = split if split is not None else split_indices(len(df), seed)
     pipe = FeaturePipeline(rssi_cols=list(rssi_cols), other_cols=other_cols)
     pipe.fit(df.iloc[tr], y[tr])
     return PreparedData(

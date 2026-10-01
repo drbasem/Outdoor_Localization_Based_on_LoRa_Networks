@@ -118,7 +118,7 @@ class XGB(Localizer):
         self.model = XGBRegressor(
             n_estimators=p["n_estimators"], max_depth=p["max_depth"],
             learning_rate=p["learning_rate"], early_stopping_rounds=p["early_stopping_rounds"],
-            eval_metric="rmse", tree_method="hist", random_state=config.SEED, n_jobs=-1,
+            eval_metric="rmse", tree_method=p["tree_method"], random_state=config.SEED, n_jobs=-1,
         )
 
     def fit(self, X, y, X_val=None, y_val=None):
@@ -308,7 +308,7 @@ class Hybrid(Localizer):
         self.xgb = []
         for j in range(2):
             m = XGBRegressor(n_estimators=c["xgb_n_estimators"], max_depth=c["xgb_max_depth"],
-                             learning_rate=c["xgb_learning_rate"], tree_method="hist",
+                             learning_rate=c["xgb_learning_rate"], tree_method=c["xgb_tree_method"],
                              early_stopping_rounds=c["early_stopping_rounds"], eval_metric="rmse",
                              random_state=config.SEED, n_jobs=-1)
             m.fit(Xa, y[:, j], eval_set=[(Xva, y_val[:, j])], verbose=False)

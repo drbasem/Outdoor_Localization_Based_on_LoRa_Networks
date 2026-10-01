@@ -85,6 +85,11 @@ XGB = dict(  # [P, Sec. V-E, Table 6]
     max_depth=12,
     learning_rate=0.05,
     early_stopping_rounds=10,  # [S]
+    # Exact greedy split finding. XGBoost < 2.0 chose this by default for a dataset of this
+    # size; XGBoost >= 2.0 defaults to "hist" (256 bins per feature), which coarsens the
+    # frame counter (values 1-199,164) and costs ~20 m on FV4 (268.4 m vs 247.1 m exact;
+    # paper 248.7 m). On RSSI-only inputs the two methods agree within ~1 m.
+    tree_method="exact",
 )
 
 LGBM = dict(  # [P, Sec. V-F, Tables 7-8]
@@ -114,5 +119,6 @@ HYBRID = dict(  # [P, Sec. III-G / V-G]
     xgb_n_estimators=400,
     xgb_max_depth=12,
     xgb_learning_rate=0.09,
+    xgb_tree_method="exact",  # see the note in XGB above
     early_stopping_rounds=10,
 )
