@@ -37,12 +37,14 @@ def main():
     ap.add_argument("--force", action="store_true", help="ignore cached results")
     ap.add_argument("--quick", action="store_true", help="tiny budgets for a smoke test")
     ap.add_argument("--runs-dir", default=None, help="where to cache results")
+    ap.add_argument("--source", choices=["auto", "csv", "json"], default="auto",
+                    help="auto: CSV for FV1-2, JSON otherwise; json: JSON for every FV (as in the paper)")
     args = ap.parse_args()
 
-    runs_dir = Path(args.runs_dir) if args.runs_dir else (
-        config.RESULTS_DIR / ("runs_quick" if args.quick else "runs"))
+    default = "runs_quick" if args.quick else ("runs_json" if args.source == "json" else "runs")
+    runs_dir = Path(args.runs_dir) if args.runs_dir else config.RESULTS_DIR / default
     for fv in args.fv:
-        prepared = experiment.prepare_fv(fv)
+        prepared = experiment.prepare_fv(fv, source=args.source)
         for name in args.models:
             kw = QUICK_KWARGS.get(name, {}) if args.quick else {}
             experiment.run(name, fv, prepared=prepared, force=args.force, runs_dir=runs_dir,
@@ -52,7 +54,7 @@ def main():
     cols = ["fv", "model", "n_features", "mean_m", "median_m", "sd_m", "r2_lat", "r2_lon",
             "within_100m", "within_300m", "train_s", "infer_single_mean_s"]
     table = table[[c for c in cols if c in table.columns]]
-    out = runs_dir.parent / ("summary_quick.csv" if args.quick else "summary.csv")
+    out = runs_dir.parent / f"summary{runs_dir.name[4:]}.csv"  # summary.csv, summary_json.csv, ...
     table.to_csv(out, index=False)
     print(table.round(3).to_string(index=False))
     print(f"\nSaved {out}")

@@ -23,22 +23,31 @@ def _slug(name: str) -> str:
     return name.replace("-", "").replace(" ", "_").lower()
 
 
-def load_source(fv: str) -> tuple[pd.DataFrame, list[str]]:
+_JSON_CACHE: dict = {}
+
+
+def load_source(fv: str, source: str = "auto") -> tuple[pd.DataFrame, list[str]]:
     """Return the DataFrame and RSSI columns needed for ``fv``.
 
-    FV1 and FV2 use the verified CSV release. Every other FV needs the JSON release.
+    ``source="auto"``: FV1 and FV2 use the CSV release; FV3-FV16 use the JSON release.
+    ``source="json"``: every FV uses the JSON release, as the paper did. The JSON has
+    130,430 messages (one more than the CSV) in a different row order, so the random split
+    differs from the CSV-based one.
     """
-    if fv in features.CSV_FEATURE_VECTORS:
+    if source == "csv" or (source == "auto" and fv in features.CSV_FEATURE_VECTORS):
         df = data.load_csv()
         return df, data.active_gateways(df)
-    df = data.load_json()
+    if "df" not in _JSON_CACHE:
+        _JSON_CACHE["df"] = data.load_json()
+    df = _JSON_CACHE["df"]
     return df, [c for c in df.columns if c.startswith("RSSI_")]
 
 
-def prepare_fv(fv: str, df: pd.DataFrame | None = None, rssi_cols: list[str] | None = None):
+def prepare_fv(fv: str, df: pd.DataFrame | None = None, rssi_cols: list[str] | None = None,
+               source: str = "auto"):
     """Build the scaled train/val/test splits for feature vector ``fv``."""
     if df is None:
-        df, rssi_cols = load_source(fv)
+        df, rssi_cols = load_source(fv, source)
     rssi, other = features.columns_for(fv, df, rssi_cols)
     return preprocessing.prepare(df, rssi, other)
 
