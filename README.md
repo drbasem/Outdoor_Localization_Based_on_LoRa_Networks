@@ -66,6 +66,58 @@ jupyter lab notebooks/                       # read the notebooks in order 01 �
 Every run is cached under `results/runs/<FV>/<model>.{json,npz}`, so after the full run the
 notebooks open in seconds. Use `--force` (or `FORCE = True` in notebook 3) to retrain.
 
+## Running the notebooks: step by step
+
+### Option A: read them on GitHub (no installation)
+Open the `notebooks/` folder on GitHub (branch `claude/keen-hamilton-7kcqml`) and click a
+notebook. GitHub shows the text, code, tables and figures exactly as they were last run.
+You can read everything this way, but you cannot change or run anything.
+
+### Option B: run them in Google Colab (recommended; free, nothing to install)
+| Notebook | |
+|---|---|
+| 1 · Dataset | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/drbasem/Outdoor_Localization_Based_on_LoRa_Networks/blob/claude/keen-hamilton-7kcqml/notebooks/01_dataset_exploration.ipynb) |
+| 2 · Preprocessing | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/drbasem/Outdoor_Localization_Based_on_LoRa_Networks/blob/claude/keen-hamilton-7kcqml/notebooks/02_preprocessing.ipynb) |
+| 3 · Models | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/drbasem/Outdoor_Localization_Based_on_LoRa_Networks/blob/claude/keen-hamilton-7kcqml/notebooks/03_models.ipynb) |
+| 4 · Results | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/drbasem/Outdoor_Localization_Based_on_LoRa_Networks/blob/claude/keen-hamilton-7kcqml/notebooks/04_results.ipynb) |
+
+1. Click a badge and sign in with a Google account.
+2. Run the **first code cell** (click it, then press **Shift + Enter**). It downloads this repository
+   and the dataset from Zenodo, and checks the checksums. This takes 1–2 minutes the first time.
+   If Colab warns that the notebook is not authored by Google, click **Run anyway**.
+3. Use **Runtime → Run all**, or press Shift + Enter cell by cell, reading as you go.
+4. Change any value and re-run the cell to see what happens, for example `k` in the k-NN grid.
+   Your changes live only in your Colab copy. Use **File → Save a copy in Drive** to keep them.
+
+Each notebook in Colab is a fresh machine, so its first cell downloads the data again.
+
+### Option C: run them on your own computer
+1. Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html) (or Anaconda), then open
+   *Anaconda Prompt* (Windows) or a terminal (macOS/Linux).
+2. Get the code and create an environment:
+   ```bash
+   git clone -b claude/keen-hamilton-7kcqml https://github.com/drbasem/Outdoor_Localization_Based_on_LoRa_Networks.git
+   cd Outdoor_Localization_Based_on_LoRa_Networks
+   conda create -n lora python=3.11 -y
+   conda activate lora
+   pip install -r requirements.txt
+   ```
+   Without git, use **Code → Download ZIP** on GitHub (with the branch selected) and unzip it.
+3. Get the data: run `python scripts/download_data.py --json`, or copy your own
+   `lorawan_antwerp_2019_dataset.csv` and `lorawan_antwerp_2019_dataset.json.txt` into `data/`.
+4. Check that everything works: `pytest -q` should report `9 passed`.
+5. Start Jupyter with `jupyter lab`. A browser tab opens; go to `notebooks/` and open
+   `01_dataset_exploration.ipynb`.
+6. Read the notebooks in order **01 → 04**, pressing Shift + Enter to run each cell.
+
+### What runs fast and what does not
+All model results are cached in `results/`, so a full pass through the four notebooks takes about
+a minute. Nothing is retrained unless you ask for it:
+- In notebook 3, set `FORCE = True` to retrain the seven models (about 3 hours on a 4-core laptop;
+  SVR and the CNNs take the longest).
+- On the command line, `python scripts/run_experiments.py --fv FV1 --quick` trains every model with
+  tiny budgets in about 3 minutes, which is a good way to see the training loop without waiting.
+
 ## The method in one page
 
 | Step | What | Paper |
