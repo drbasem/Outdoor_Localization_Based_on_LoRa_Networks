@@ -280,8 +280,8 @@ fv"""),
     md("""
 The CSV release has RSSI and SF only, so **FV1 and FV2** can be built from it. Channel (CH),
 frame counter (CNT), airtime (AT), SNR and ESP are only in the JSON release. `lora_loc.data.load_json`
-parses it (tested against the schema published on Zenodo), and notebook 4 runs FV3–FV16
-automatically if `data/lorawan_antwerp_2019_dataset.json.txt` is present.
+parses it (130,430 messages, 44 gateways, the counts the paper reports), and notebook 4 runs
+FV1–FV16 from it when `data/lorawan_antwerp_2019_dataset.json.txt` is present.
 
 > **A caution about CNT (frame counter).** FV4, FV6–FV8, FV15 and FV16 contain the uplink
 > counter and give the paper's best results (≈245–255 m versus ≈325 m for RSSI only). The counter
@@ -289,7 +289,8 @@ automatically if `data/lorawan_antwerp_2019_dataset.json.txt` is present.
 > lets a model find *temporally adjacent messages from the same vehicle* in the training set, and
 > those were sent from almost the same place. The improvement may therefore reflect track
 > continuity rather than radio information that would carry over to new devices or new time periods.
-> Treat CNT-based numbers with care and check them with a time-based split.
+> Treat CNT-based numbers with care. Notebook 4 (section 4.6) checks this with a chronological
+> split: the CNT advantage disappears, and FV4 becomes worse than RSSI alone.
 
 → Continue with **notebook 3**.
 """),
@@ -547,28 +548,124 @@ display(t.rename(columns={"infer_single_mean_s": "ours per-sample (s)",
                           "infer_batched_s": "ours batched, per sample (s)",
                           "train_s": "ours training (s)"}).round(5))"""),
     md("""
-## 4.5 FV3–FV16 (needs the JSON release)
+## 4.5 All 16 feature vectors (JSON release, paper Tables 10–11)
+
+The paper builds every feature vector from the JSON release. Running
+`python scripts/run_experiments.py --source json --fv FV1 … FV16 --models k-NN XGBoost LightGBM ANN`
+caches the results in `results/runs_json/`. The cell below trains whatever is missing, which is
+fast for k-NN / XGBoost / LightGBM and takes a few minutes per FV for the ANN.
+"""),
+    code("""
+json_dir = config.RESULTS_DIR / "runs_json"
+ALL_FV = [f"FV{i}" for i in range(1, 17)]
+if config.JSON_FILE.exists():
+    for fv in ALL_FV:
+        d = experiment.prepare_fv(fv, source="json")
+        for name in ["k-NN", "XGBoost", "LightGBM", "ANN"]:
+            experiment.run(name, fv, prepared=d, runs_dir=json_dir, verbose=False)
+rj = experiment.collect(json_dir)
+if rj.empty:
+    print("No JSON results: put lorawan_antwerp_2019_dataset.json.txt in data/ and re-run.")
+else:
+    ours = rj.pivot(index="model", columns="fv", values="mean_m")
+    ours = ours[[f for f in ALL_FV if f in ours.columns]]
+    delta = ours - paper.MEAN_ERROR_M.loc[ours.index, ours.columns]
+    print("Reproduced mean error (m):"); display(ours.round(1))
+    print("Δ = ours − paper (m):"); display(delta.round(1))"""),
+    code("""
+if not rj.empty:
+    models4 = [m for m in ["k-NN", "ANN", "XGBoost", "LightGBM"] if m in delta.index]
+    fig, ax = plt.subplots(figsize=(11, 3.2))
+    im = ax.imshow(delta.loc[models4].to_numpy(dtype=float), cmap="RdBu_r", vmin=-40, vmax=40, aspect="auto")
+    ax.set_xticks(range(delta.shape[1]), delta.columns); ax.set_yticks(range(len(models4)), models4)
+    for i, m in enumerate(models4):
+        for j, fv in enumerate(delta.columns):
+            v = delta.loc[m, fv]
+            if pd.notna(v): ax.text(j, i, f"{v:+.0f}", ha="center", va="center", fontsize=8,
+                                    color="white" if abs(v) > 25 else plotting.INK)
+    ax.grid(False); ax.set_title("Reproduced − paper mean error (m); white ≈ exact")
+    plt.colorbar(im, ax=ax, label="Δ (m)"); plt.show()"""),
+    md("""
+**Reading the heatmap.**
+* **XGBoost and LightGBM are within 2 m of the paper on every feature vector.** The paper's
+  feature-vector study therefore reproduces for the tree models.
+* For XGBoost this needs `tree_method="exact"`. With the 256-bin histogram default of
+  XGBoost ≥ 2.0, the frame counter (values up to 199,164) is coarsened, and the CNT feature
+  vectors come out about 20 m worse. This is a good example of how a library default can quietly
+  change a published result.
+* k-NN is off only where the channel index enters a Manhattan distance (FV3, FV6, FV7).
+* The ANN is the least stable model: it is 11–41 m worse on FV1–FV8 and close on FV9–FV16.
+
+## 4.6 Do the results survive a stricter split? (beyond the paper)
+
+`python scripts/split_check.py` retrains LightGBM under three protocols:
+**random** (the paper's), **chronological** (train on the earliest 70 % of messages, test on the
+latest 15 %), and **unseen devices** (whole vehicles held out).
+"""),
+    code("""
+sc_file = config.RESULTS_DIR / "split_check.csv"
+if sc_file.exists():
+    sc = pd.read_csv(sc_file)
+    tab = sc.pivot(index="fv", columns="split", values="mean_m")
+    tab = tab.loc[[f for f in ALL_FV if f in tab.index], ["random", "chronological", "device"]]
+    display(tab.round(1))
+    fig, ax = plt.subplots(figsize=(8, 3.8))
+    x = np.arange(len(tab)); w = 0.27
+    for k, (col, colr) in enumerate(zip(tab.columns, ["#c3c2b7", plotting.MODEL_COLORS["k-NN"], plotting.MODEL_COLORS["CNN"]])):
+        ax.bar(x + (k - 1) * (w + 0.01), tab[col], w, color=colr, label=col)
+    ax.set_xticks(x, tab.index); ax.set(ylabel="Mean error (m)", title="LightGBM under three split protocols")
+    ax.grid(axis="x", visible=False); ax.legend(); plt.show()
+else:
+    print("Run `python scripts/split_check.py` first (needs the JSON release).")"""),
+    md("""
+Why does the random split look so good? Measure how close each test message is to the nearest
+*training* position:
 """),
     code("""
 if config.JSON_FILE.exists():
-    for fv in [f"FV{i}" for i in range(3, 17)]:
-        d = experiment.prepare_fv(fv)
-        for name in ["k-NN", "XGBoost", "LightGBM"]:   # add more models if you have the time
-            experiment.run(name, fv, prepared=d)
-    print("Re-run this notebook from the top to include FV3-FV16 in the tables above.")
-else:
-    print(f"{config.JSON_FILE.name} not found -> FV3-FV16 skipped.\\n"
-          "Download it with `python scripts/download_data.py --json`, then re-run this cell.")"""),
+    from sklearn.neighbors import BallTree
+    dfj, _ = experiment.load_source("FV1", source="json")
+    xy = np.column_stack(geo.to_local_xy_m(dfj.Latitude, dfj.Longitude))
+    splits = {"random": pp.split_indices(len(dfj)), "chronological": pp.chronological_split(dfj.RxTime),
+              "device": pp.device_split(dfj.DevEUI)}
+    rows = []
+    for name, (tr, va, te) in splits.items():
+        dist = BallTree(xy[tr]).query(xy[te], k=1)[0][:, 0]
+        cells = pd.Series(list(zip((xy[te, 0] // 50).astype(int), (xy[te, 1] // 50).astype(int)))).value_counts()
+        rows.append({"split": name, "test messages": len(te), "test devices": dfj.DevEUI.iloc[te].nunique(),
+                     "median dist. to nearest train point (m)": np.median(dist),
+                     "within 10 m of a train point": np.mean(dist < 10),
+                     "share in 10 busiest 50 m cells": cells.iloc[:10].sum() / len(te)})
+    display(pd.DataFrame(rows).set_index("split").round(3))"""),
     md("""
-## 4.6 Discussion: what reproduces, what does not, and why
+**What this shows**
+1. **The random split tests on places already in the training set.** The median test message is
+   less than a metre from a training position. This is interpolation between near-duplicates,
+   not localization of new places.
+2. **The frame counter (CNT) is a leakage feature.** Under the random split it gives the largest
+   gain (FV4 ≈ 253 m). Under the chronological split FV4 becomes the *worst* feature vector
+   (≈ 555 m, almost twice the RSSI-only error), because there are no neighbouring messages from
+   the same vehicle to look up.
+3. **Chronological errors without CNT are lower than random**, but only because the February test
+   period is dominated by a few stationary hotspots (a depot). The test distribution changed.
+4. **Unseen devices nearly double the error** (≈ 560–575 m without CNT), even though most test
+   positions are geographically covered. A fingerprint learned on some vehicles transfers poorly
+   to others, which is consistent with device- or mounting-specific RSSI offsets.
+
+**Lesson for your own work:** always report a split that matches the deployment scenario
+(new time period, new devices) next to the random split.
+"""),
+    md("""
+## 4.7 Discussion: what reproduces, what does not, and why
 
 See the **Reproduction report** section of the repository `README.md` for the final numbers
 from our run and a full list of deviations. The key points for students:
 
 1. **The protocol reproduces exactly.** Dataset checksum, 44 active gateways, −200 → −128 dBm,
    and split sizes (91,300 / 19,564 / 19,565) all match the paper.
-2. **The tree models and k-NN reproduce within about 0.5–2 % on FV1 and FV2** (XGBoost, LightGBM,
-   k-NN; the full k-NN grid of Table 1 too). SVR and the Hybrid reproduce within about 1 % on FV1.
+2. **XGBoost and LightGBM reproduce within 2 m on all 16 feature vectors** (section 4.5), and k-NN
+   within ≈5 m except where the channel enters its distance; the full k-NN grid of Table 1 also
+   reproduces. SVR and the Hybrid reproduce within about 1 % on FV1.
    The larger gaps are the ANN (+22 m on FV1; the learning rate is not reported, and 1e-4 was the
    best of the rates we tried), the CNN (+10 m on FV1), and **SVR on FV2 (+54 m)**. For SVR the paper
    says it used additional feature selection and random search beyond the grid, without giving
@@ -580,8 +677,8 @@ from our run and a full list of deviations. The key points for students:
    over-interpreted without repeated runs (different seeds) and confidence intervals.
 4. **RSSI-only fingerprinting in this dataset has a floor of roughly 300 m on average**, set by
    sparse coverage (many messages heard by one gateway). The paper's gains to ≈245 m come from
-   FVs with the **frame counter**, which, under a random per-message split, may encode
-   track continuity rather than radio information that transfers to new devices (see notebook 2).
+   FVs with the **frame counter**, and section 4.6 shows they disappear under a chronological or
+   device-held-out split.
 5. **Median ≪ mean:** the error distribution has a heavy tail, so report median, 90th percentile
    and the CDF, not just the mean.
 """),
